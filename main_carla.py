@@ -1,39 +1,3 @@
-# "manual_control.py" from Carla PythonAPI is modified to work with ROS Messages
-
-
-"""
-Welcome to CARLA manual control.
-
-Use ARROWS or WASD keys for control.
-
-    W            : throttle
-    S            : brake
-    AD           : steer
-    Q            : toggle reverse
-    Space        : hand-brake
-    P            : toggle autopilot
-    M            : toggle manual transmission
-    ,/.          : gear up/down
-
-    TAB          : change sensor position
-    `            : next sensor
-    [1-9]        : change to sensor [1-9]
-    C            : change weather (Shift+C reverse)
-    Backspace    : change vehicle
-
-    R            : toggle recording images to disk
-
-    CTRL + R     : toggle recording of simulation (replacing any previous)
-    CTRL + P     : start replaying last recorded simulation
-    CTRL + +     : increments the start time of the replay by 1 second (+SHIFT = 10 seconds)
-    CTRL + -     : decrements the start time of the replay by 1 second (+SHIFT = 10 seconds)
-
-    F1           : toggle HUD
-    H/?          : toggle help
-    ESC          : quit
-"""
-
-
 # ==============================================================================
 # -- imports -------------------------------------------------------------------
 # ==============================================================================
@@ -47,7 +11,6 @@ from carla import ColorConverter as cc
 from GlobalPathCarla2ROS import globalPathServer
 import networkx as nx
 from get_topology import *
-import time
 
 import argparse
 import collections
@@ -57,60 +20,12 @@ import math
 import random
 import re
 import weakref
-
-
-
-try:
-	import pygame
-	from pygame.locals import KMOD_CTRL
-	from pygame.locals import KMOD_SHIFT
-	from pygame.locals import K_0
-	from pygame.locals import K_9
-	from pygame.locals import K_BACKQUOTE
-	from pygame.locals import K_BACKSPACE
-	from pygame.locals import K_COMMA
-	from pygame.locals import K_DOWN
-	from pygame.locals import K_ESCAPE
-	from pygame.locals import K_F1
-	from pygame.locals import K_LEFT
-	from pygame.locals import K_PERIOD
-	from pygame.locals import K_RIGHT
-	from pygame.locals import K_SLASH
-	from pygame.locals import K_SPACE
-	from pygame.locals import K_TAB
-	from pygame.locals import K_UP
-	from pygame.locals import K_a
-	from pygame.locals import K_c
-	from pygame.locals import K_d
-	from pygame.locals import K_h
-	from pygame.locals import K_m
-	from pygame.locals import K_p
-	from pygame.locals import K_q
-	from pygame.locals import K_r
-	from pygame.locals import K_s
-	from pygame.locals import K_w
-	from pygame.locals import K_MINUS
-	from pygame.locals import K_EQUALS
-except ImportError:
-	raise RuntimeError('cannot import pygame, make sure pygame package is installed')
-
-try:
-	import numpy as np
-except ImportError:
-	raise RuntimeError('cannot import numpy, make sure numpy package is installed')
-
+import pygame
+import numpy as np
 
 # ==============================================================================
 # -- Global functions ----------------------------------------------------------
 # ==============================================================================
-
-
-def find_weather_presets():
-	rgx = re.compile('.+?(?:(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])|$)')
-	name = lambda x: ' '.join(m.group(0) for m in rgx.finditer(x))
-	presets = [x for x in dir(carla.WeatherParameters) if re.match('[A-Z].+', x)]
-	return [(getattr(carla.WeatherParameters, x), name(x)) for x in presets]
-
 
 def get_actor_display_name(actor, truncate=250):
 	name = ' '.join(actor.type_id.replace('_', '.').title().split('.')[1:])
@@ -126,48 +41,37 @@ class World(object):
 	def __init__(self, carla_world, hud, actor_filter):
 		self.world = carla_world
 		self.map = self.world.get_map()
-		self.hud = hud
-		self.player = None
+		self.hud = hud		# screen #
+		self.player = None	# ego-vehicle #
+		self.agent  = None	# ego-vehicle -> navigation #
 		self.collision_sensor = None
 		self.lane_invasion_sensor = None
 		self.gnss_sensor = None
-		self.camera_manager = None
-		self._weather_presets = find_weather_presets()
-		self._weather_index = 0
-		self._actor_filter = actor_filter
-		self.restart()
-		self.world.on_tick(hud.on_world_tick)
+		self.camera_manager = None			# default camera on the screen #
+		self._actor_filter = actor_filter 	# select the Lincoln MKZ #
+		self.restart()						# initialize the world and the vehicle #
+		self.world.on_tick(hud.on_world_tick)	# update the display content #
 		self.recording_enabled = False
 		self.recording_start = 0
 
 	def restart(self):
-		# Keep same camera config if the camera manager exists.
-		cam_index = self.camera_manager._index if self.camera_manager is not None else 0
-		cam_pos_index = self.camera_manager._transform_index if self.camera_manager is not None else 0
-		# Get a random blueprint.
-		blueprint = random.choice(self.world.get_blueprint_library().filter(self._actor_filter))
-		blueprint.set_attribute('role_name', 'hero')
-		if blueprint.has_attribute('color'):
-			# color = random.choice(blueprint.get_attribute('color').recommended_values)
-			color = '50,50,50'
-			blueprint.set_attribute('color', color)
-		# Spawn the player.
-		if self.player is not None:
-			spawn_point = self.player.get_transform()
-			spawn_point.location.z += 2.0
-			spawn_point.rotation.roll = 0.0
-			spawn_point.rotation.pitch = 0.0
-			self.destroy()
-			self.player = self.world.try_spawn_actor(blueprint, spawn_point)
-		while self.player is None:
-			# spawn_points = self.map.get_spawn_points()
-			# spawn_point = random.choice(spawn_points) if spawn_points else carla.Transform()
-			spawn_point = carla.Transform(carla.Location(x=97.2789, y=63.1175, z=1.8431), carla.Rotation(pitch=0, yaw=-10.4166, roll=0))
-			# print("spawn_point...",spawn_point)
+		## Select the default camera for display ##
+		cam_index = 0
+		cam_pos_index = 0
 
+		## Select the black Lincoln MKZ as ego-vehicle ##
+		blueprint = self.world.get_blueprint_library().filter(self._actor_filter)[0]
+		blueprint.set_attribute('role_name', 'hero')
+		blueprint.set_attribute('color', '50,50,50')
+		
+		## Spawn the player. ##
+		while self.player is None:
+			spawn_point = carla.Transform(carla.Location(x=97.2789, y=63.1175, z=1.8431), carla.Rotation(pitch=0, yaw=-10.4166, roll=0))
 			self.player = self.world.try_spawn_actor(blueprint, spawn_point)
-		# Set up the sensors.
-		self.LiDAR_sensor = LiDAR_Sensor(self.player)
+		print("spawn_point: ",spawn_point)
+
+		## Set up the sensors. ##
+		# self.LiDAR_sensor = LiDAR_Sensor(self.player)
 		self.collision_sensor = CollisionSensor(self.player, self.hud)
 		self.lane_invasion_sensor = LaneInvasionSensor(self.player, self.hud)
 		self.gnss_sensor = GnssSensor(self.player)
@@ -177,12 +81,6 @@ class World(object):
 		actor_type = get_actor_display_name(self.player)
 		self.hud.notification(actor_type)
 
-	def next_weather(self, reverse=False):
-		self._weather_index += -1 if reverse else 1
-		self._weather_index %= len(self._weather_presets)
-		preset = self._weather_presets[self._weather_index]
-		self.hud.notification('Weather: %s' % preset[1])
-		self.player.get_world().set_weather(preset[0])
 
 	def tick(self, clock):
 		self.hud.tick(self, clock)
@@ -191,18 +89,13 @@ class World(object):
 		self.camera_manager.render(display)
 		self.hud.render(display)
 
-	def destroySensors(self):
-			self.camera_manager.sensor.destroy()
-			self.camera_manager.sensor = None
-			self.camera_manager._index = None
-
 	def destroy(self):
 		actors = [
 			self.camera_manager.sensor,
 			self.collision_sensor.sensor,
 			self.lane_invasion_sensor.sensor,
 			self.gnss_sensor.sensor,
-			self.LiDAR_sensor.sensor,
+			# self.LiDAR_sensor.sensor,
 			self.player]
 		for actor in actors:
 			if actor is not None:
@@ -224,7 +117,7 @@ class HUD(object):
 		mono = pygame.font.match_font(mono)
 		self._font_mono = pygame.font.Font(mono, 14)
 		self._notifications = FadingText(font, (width, 40), (0, height - 40))
-		self.help = HelpText(pygame.font.Font(mono, 24), width, height)
+		# self.help = HelpText(pygame.font.Font(mono, 24), width, height)
 		self.server_fps = 0
 		self.frame_number = 0
 		self.simulation_time = 0
@@ -342,7 +235,6 @@ class HUD(object):
 					display.blit(surface, (8, v_offset))
 				v_offset += 18
 		self._notifications.render(display)
-		self.help.render(display)
 
 
 # ==============================================================================
@@ -372,34 +264,6 @@ class FadingText(object):
 
 	def render(self, display):
 		display.blit(self.surface, self.pos)
-
-
-# ==============================================================================
-# -- HelpText ------------------------------------------------------------------
-# ==============================================================================
-
-
-class HelpText(object):
-	def __init__(self, font, width, height):
-		lines = __doc__.split('\n')
-		self.font = font
-		self.dim = (680, len(lines) * 22 + 12)
-		self.pos = (0.5 * width - 0.5 * self.dim[0], 0.5 * height - 0.5 * self.dim[1])
-		self.seconds_left = 0
-		self.surface = pygame.Surface(self.dim)
-		self.surface.fill((0, 0, 0, 0))
-		for n, line in enumerate(lines):
-			text_texture = self.font.render(line, True, (255, 255, 255))
-			self.surface.blit(text_texture, (22, n * 22))
-			self._render = False
-		self.surface.set_alpha(220)
-
-	def toggle(self):
-		self._render = not self._render
-
-	def render(self, display):
-		if self._render:
-			display.blit(self.surface, self.pos)
 
 
 # ==============================================================================
@@ -633,19 +497,6 @@ class CameraManager(object):
 			image.save_to_disk('_out/%08d' % image.frame_number)
 
 
-
-class closestPoint:
-	def __init__(self, points):
-		self.points = points
-
-	def distance(self,p1,p2):
-		return sqrt((p2[0]-p1[0])**2+(p2[1]-p1[1])**2)
-
-	def closest_node(self, node):
-		nodes = self.points
-		dist_2 = np.sum((nodes - node)**2, axis=1)
-		return np.argmin(dist_2)
-
 def main_loop(args):
 	pygame.init()
 	pygame.font.init()
@@ -662,52 +513,12 @@ def main_loop(args):
 		hud = HUD(args.width, args.height)
 		world = World(client.get_world(), hud, args.filter)
 
-		# source_location = world.player.get_transform()
-		# print(source_location)
-
-		start_waypoint = world.map.get_waypoint(world.player.get_location())
-		swx = start_waypoint.transform.location.x 
-		swy = start_waypoint.transform.location.y 
-		swz = 0.0
-		initial_location = (swx,swy,swz)
-		initial_location_ = np.array(initial_location)
-		# print start_waypoint.transform.location.y 
-
-
-		topology,waypoints = get_topology(world.map)
-		# print(type(topology))
-		graph,id_map = build_graph(topology)
-		points = np.array(id_map.keys())
-		
-		path = closestPoint(points)
-		ind = path.closest_node(initial_location_)
-		snode = id_map[tuple(points[ind])]
-		dnode = id_map[random.choice(id_map.keys())]
-
-		# print(snode,dnode)
-
-		node = globalPathServer(world.world,world.player,'carla',snode,dnode)
-		# node.plot()
-		# r = rospy.Rate(10)
 		clock = pygame.time.Clock()
 		while not rospy.is_shutdown():
-		# while  True:
-			
 			clock.tick_busy_loop(20)
-			odom = world.player.get_transform()
-			# print(odom.location)
-			node.draw_lanemarkers()
-			velocity = world.player.get_velocity()
-			speed = np.linalg.norm([velocity.x,velocity.y,velocity.z])
-			node.publish_odom(odom)
-			node.publish_speed(speed)
-			node.publish_path()
-			# node.publish_LiDAR(world.LiDAR_sensor.points)
-			node.apply_control()
 			world.tick(clock)
 			world.render(display)
 			pygame.display.flip()
-			# r.sleep()
 
 	finally:
 
@@ -767,8 +578,6 @@ def main():
 	logging.basicConfig(format='%(levelname)s: %(message)s', level=log_level)
 
 	logging.info('listening to server %s:%s', args.host, args.port)
-
-	# print(__doc__)
 
 	try:
 		main_loop(args)
