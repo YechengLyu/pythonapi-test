@@ -4,13 +4,12 @@
 
 from __future__ import print_function
 
-import rospy
-
 import carla
 from carla import ColorConverter as cc
-from GlobalPathCarla2ROS import globalPathServer
-import networkx as nx
-from get_topology import *
+from agents.navigation.agent import Agent
+from agents.navigation.global_route_planner_dao import GlobalRoutePlannerDAO
+from agents.navigation.global_route_planner import GlobalRoutePlanner
+from ROS_Node import ROS_Node
 
 import argparse
 import collections
@@ -44,6 +43,7 @@ class World(object):
 		self.hud = hud		# screen #
 		self.player = None	# ego-vehicle #
 		self.agent  = None	# ego-vehicle -> navigation #
+		self.ros_node =  None # ros interface for carla
 		self.collision_sensor = None
 		self.lane_invasion_sensor = None
 		self.gnss_sensor = None
@@ -53,6 +53,11 @@ class World(object):
 		self.world.on_tick(hud.on_world_tick)	# update the display content #
 		self.recording_enabled = False
 		self.recording_start = 0
+		self.light_list = None
+		self.stop_list  = None
+		self.car_list	= None
+		self.ped_list 	= None
+		self.route_planner = None
 
 	def restart(self):
 		## Select the default camera for display ##
@@ -81,6 +86,17 @@ class World(object):
 		actor_type = get_actor_display_name(self.player)
 		self.hud.notification(actor_type)
 
+		## Set up agent for scenario perception, route planner and ROS interface
+		actor_list = self.world.get_actors()
+		self.light_list	= actor_list.filter("*traffic_light*")
+		self.stop_list	= actor_list.filter("*stop*")
+		self.car_list	= actor_list.filter("*vehicle*")
+		self.ped_list	= actor_list.filter("*walker*")
+		self.agent = Agent(self.player)
+		self.ros_node = ROS_Node(stage=self) 
+		dao = GlobalRoutePlannerDAO(self.map)
+		self.route_planner = GlobalRoutePlanner(dao)
+		self.route_planner.setup()
 
 	def tick(self, clock):
 		self.hud.tick(self, clock)
@@ -514,7 +530,8 @@ def main_loop(args):
 		world = World(client.get_world(), hud, args.filter)
 
 		clock = pygame.time.Clock()
-		while not rospy.is_shutdown():
+		while True:
+			world.ros_node.run_step()
 			clock.tick_busy_loop(20)
 			world.tick(clock)
 			world.render(display)
@@ -537,7 +554,6 @@ def main_loop(args):
 
 
 def main():
-	# rospy.init_node('main_carla')
 	argparser = argparse.ArgumentParser(
 		description='CARLA Manual Control Client')
 	argparser.add_argument(
