@@ -33,7 +33,8 @@ class globalPathServer(object):
 
 		self.ns = ns
 		# Get topology from the map
-		_map = world.get_map()
+		self.world = world
+		self.map   = self.world.get_map()
 
 		self.player = player 
 		self.throttle = 0
@@ -41,7 +42,7 @@ class globalPathServer(object):
 		self.steering = 0
 
 		# Build waypoint graph
-		topology,waypoints = get_topology(_map)
+		topology,waypoints = get_topology(self.map)
 		self.graph,self.id_map = build_graph(topology)
 
 		# get source and destination location from user (invoke while creating the object)
@@ -53,19 +54,10 @@ class globalPathServer(object):
 		for i in range(self.p.shape[0]):
 			wp = carla.Location(self.p[i][0],self.p[i][1],self.p[i][2])
 			world.debug.draw_point(wp, size=0.1, color=carla.Color(0, 255, 0), life_time=300.0,persistent_lines=True)
-		# print(wp)
 
 
-
-
-
-		# Because ROS Uses right handed coordinate system
-		# and carla uses left handed coordinated system
-		# https://math.stackexchange.com/questions/2626961/how-to-convert-a-right-handed-coordinate-system-to-left-handed
-				
-		# print "shorted path...",self.p 
-		for i in range(len(self.p)):
-			self.p[i][1] = -self.p[i][1]
+		for row in self.p:
+			row[1]=-row[1]
 		# print "shorted path...",self.p 
 		# self.plot()
 		rospy.init_node('{}_path_server'.format(self.ns), anonymous = True)
@@ -82,6 +74,9 @@ class globalPathServer(object):
 		self.path = Path()
 		self.makePathMessage()
 
+	def lateral_shift(self,transform, shift):
+		transform.rotation.yaw += 90
+		return transform.location + shift * transform.get_forward_vector()
 
 
 
@@ -208,6 +203,28 @@ class globalPathServer(object):
 		q = quaternion_from_euler(0, 0, angle_)
 		quat_msg = Quaternion(q[0], q[1], q[2], q[3])
 		return quat_msg
+
+	def draw_lanemarkers(self):
+		location = self.player.get_location()
+		wp = self.map.get_waypoint(location)
+		# wp_marking =  wp.transform.location
+		left_marking = self.lateral_shift(wp.transform, -wp.lane_width * 0.5)
+		right_marking = self.lateral_shift(wp.transform, wp.lane_width * 0.5)
+		wp = wp.next(5)[0]
+		for i in range(5):
+			if not wp.is_intersection:
+				# current_wp_marking = wp.transform.location
+				# self.world.debug.draw_line(wp_marking, current_wp_marking, color=carla.Color(0, 255, 0), life_time=0.1)
+				current_left_marking = self.lateral_shift(wp.transform, -wp.lane_width * 0.5)
+				self.world.debug.draw_line(left_marking, current_left_marking, color=carla.Color(255, 0, 0), life_time=0.1)
+				current_right_marking = self.lateral_shift(wp.transform, wp.lane_width * 0.5)
+				self.world.debug.draw_line(right_marking, current_right_marking, color=carla.Color(255, 0, 0), life_time=0.1)
+				# wp_marking = current_wp_marking
+				left_marking = current_left_marking
+				right_marking = current_right_marking
+				wp = wp.next(5)[0]
+
+
 
 def main(argv):
 
