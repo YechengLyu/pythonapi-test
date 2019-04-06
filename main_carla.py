@@ -21,6 +21,7 @@ import re
 import weakref
 import pygame
 import numpy as np
+import rospy
 
 # ==============================================================================
 # -- Global functions ----------------------------------------------------------
@@ -32,17 +33,17 @@ def get_actor_display_name(actor, truncate=250):
 
 
 # ==============================================================================
-# -- World ---------------------------------------------------------------------
+# -- Stage ---------------------------------------------------------------------
 # ==============================================================================
 
 
-class World(object):
+class Stage(object):
 	def __init__(self, carla_world, hud, actor_filter):
 		self.world = carla_world
 		self.map = self.world.get_map()
 		self.hud = hud		# screen #
 		self.player = None	# ego-vehicle #
-		self.agent  = None	# ego-vehicle -> navigation #
+		# self.agent  = None	# ego-vehicle -> navigation #
 		self.ros_node =  None # ros interface for carla
 		self.collision_sensor = None
 		self.lane_invasion_sensor = None
@@ -53,10 +54,6 @@ class World(object):
 		self.world.on_tick(hud.on_world_tick)	# update the display content #
 		self.recording_enabled = False
 		self.recording_start = 0
-		self.light_list = None
-		self.stop_list  = None
-		self.car_list	= None
-		self.ped_list 	= None
 		self.route_planner = None
 
 	def restart(self):
@@ -71,7 +68,8 @@ class World(object):
 		
 		## Spawn the player. ##
 		while self.player is None:
-			spawn_point = carla.Transform(carla.Location(x=97.2789, y=63.1175, z=1.8431), carla.Rotation(pitch=0, yaw=-10.4166, roll=0))
+			# spawn_point = carla.Transform(carla.Location(x=200.2789, y=63.1175, z=1.8431), carla.Rotation(pitch=0, yaw=-10.4166, roll=0))
+			spawn_point = carla.Transform(carla.Location(x=-43.2789, y=182, z=1.8431), carla.Rotation(pitch=0, yaw=130.4166, roll=0))
 			self.player = self.world.try_spawn_actor(blueprint, spawn_point)
 		print("spawn_point: ",spawn_point)
 
@@ -86,17 +84,11 @@ class World(object):
 		actor_type = get_actor_display_name(self.player)
 		self.hud.notification(actor_type)
 
-		## Set up agent for scenario perception, route planner and ROS interface
-		actor_list = self.world.get_actors()
-		self.light_list	= actor_list.filter("*traffic_light*")
-		self.stop_list	= actor_list.filter("*stop*")
-		self.car_list	= actor_list.filter("*vehicle*")
-		self.ped_list	= actor_list.filter("*walker*")
-		self.agent = Agent(self.player)
-		self.ros_node = ROS_Node(stage=self) 
-		dao = GlobalRoutePlannerDAO(self.map)
-		self.route_planner = GlobalRoutePlanner(dao)
+		# self.agent = Agent(self.player)
+		self.dao = GlobalRoutePlannerDAO(self.map)
+		self.route_planner = GlobalRoutePlanner(self.dao)
 		self.route_planner.setup()
+		self.ros_node = ROS_Node(stage=self) 
 
 	def tick(self, clock):
 		self.hud.tick(self, clock)
@@ -332,7 +324,7 @@ class LaneInvasionSensor(object):
 		self._parent = parent_actor
 		self._hud = hud
 		world = self._parent.get_world()
-		bp = world.get_blueprint_library().find('sensor.other.lane_detector')
+		bp = world.get_blueprint_library().find('sensor.other.lane_invasion')
 		self.sensor = world.spawn_actor(bp, carla.Transform(), attach_to=self._parent)
 		# We need to pass the lambda a weak reference to self to avoid circular
 		# reference.
@@ -516,7 +508,7 @@ class CameraManager(object):
 def main_loop(args):
 	pygame.init()
 	pygame.font.init()
-	world = None
+	stage = None
 
 	try:
 		client = carla.Client(args.host, args.port)
@@ -527,23 +519,23 @@ def main_loop(args):
 			pygame.HWSURFACE | pygame.DOUBLEBUF)
 
 		hud = HUD(args.width, args.height)
-		world = World(client.get_world(), hud, args.filter)
+		stage = Stage(client.get_world(), hud, args.filter)
 
 		clock = pygame.time.Clock()
-		while True:
-			world.ros_node.run_step()
+		while not rospy.is_shutdown():
+			stage.ros_node.run_step()
 			clock.tick_busy_loop(20)
-			world.tick(clock)
-			world.render(display)
+			stage.tick(clock)
+			stage.render(display)
 			pygame.display.flip()
 
 	finally:
 
-		if (world and world.recording_enabled):
+		if (stage and stage.recording_enabled):
 			client.stop_recorder()
 
-		if world is not None:
-			world.destroy()
+		if stage is not None:
+			stage.destroy()
 
 		pygame.quit()
 
