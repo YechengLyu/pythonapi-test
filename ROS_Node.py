@@ -307,8 +307,8 @@ class ROS_Node(object):
             wp_stop_sign  = self.stage.map.get_waypoint(loc1)
             wp_ego_car    = self.stage.map.get_waypoint(loc2)
             # print(wp_stop_sign.road_id,wp_ego_car.road_id)
-            d_angle1 = abs(abs((yaw3-yaw2+180)%360-180)-0) #< 20.0 # if the light is in front of the car
-            d_angle2 = abs(abs((yaw1-yaw2+180)%360-180)-180) #< 20.0 # if the light is facing to the car
+            d_angle1 = abs(abs((yaw3-yaw2+180)%360-180)-0) < 20.0 # if the light is in front of the car
+            d_angle2 = abs(abs((yaw1-yaw2+180)%360-180)-180) < 20.0 # if the light is facing to the car
             # print(yaw3,yaw2)
             # print(d_angle1,d_angle2)
             # return True

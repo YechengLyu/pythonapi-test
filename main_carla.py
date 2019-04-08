@@ -43,7 +43,6 @@ class Stage(object):
 		self.map = self.world.get_map()
 		self.hud = hud		# screen #
 		self.player = None	# ego-vehicle #
-		# self.agent  = None	# ego-vehicle -> navigation #
 		self.ros_node =  None # ros interface for carla
 		self.collision_sensor = None
 		self.lane_invasion_sensor = None
