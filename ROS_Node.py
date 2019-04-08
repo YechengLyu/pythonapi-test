@@ -36,6 +36,7 @@ class ROS_Node(object):
         rospy.Subscriber('{}/BrakeCmd'.format(self.ns), BrakeCmd, self.callback_brake)
         rospy.Subscriber('{}/SteeringCmd'.format(self.ns), SteeringCmd, self.callback_steering)
 
+        rospy.Subscriber('{}/action'.format(self.ns), Int8, self.callback_action)
         # self.callback_throttle(ThrottleCmd())
         self.path_publisher = rospy.Publisher('{}/global_path'.format(self.ns), Path, queue_size = 10)
         self.odom_publisher = rospy.Publisher('{}/odom'.format(self.ns), Odometry, queue_size = 10)
@@ -44,8 +45,10 @@ class ROS_Node(object):
         self.left_lanemarking_publisher = rospy.Publisher('{}/left_lanemarking'.format(self.ns), Path, queue_size = 10)
         self.right_lanemarking_publisher = rospy.Publisher('{}/right_lanemarking'.format(self.ns), Path, queue_size = 10)
         self.heading_traffic_light_publisher = rospy.Publisher('{}/heading_traffic_light'.format(self.ns), UInt8, queue_size = 10)
-        self.heading_stop_sign_publisher = rospy.Publisher('{}/heading_stop_sign'.format(self.ns), UInt8, queue_size = 10)
-
+        self.heading_traffic_light_publisher = rospy.Publisher('{}/heading_traffic_light'.format(self.ns), Int8, queue_size = 10)
+        self.heading_stop_sign_publisher = rospy.Publisher('{}/heading_stop_sign'.format(self.ns), Int8, queue_size = 10)
+        self.wp_state_publisher = rospy.Publisher('{}/wp_state'.format(self.ns), Int8, queue_size = 10)
+        self.clock_publisher = rospy.Publisher('/clock'.format(self.ns), Time, queue_size = 10)
         
 
         return None
@@ -59,10 +62,12 @@ class ROS_Node(object):
         self.detect_light()
         self.detect_stop()
         self.publish_route()
+        self.detect_wp()
         self.publish_speed()
         self.publish_odom()
         self.publish_path()
         control_cmd = carla.VehicleControl(throttle=self.throttle,brake=self.brake,steer=self.steering)
+        self.publish_clock()
         self.stage.player.apply_control(control_cmd)
         return None
 
@@ -82,6 +87,8 @@ class ROS_Node(object):
         self.steering = - msg.steering_wheel_angle_cmd/8.2
 
 
+    def callback_action(self, msg):
+        self.action = msg.data
     def publish_speed(self):
         v = self.stage.player.get_velocity()
         twist = TwistStamped()
@@ -124,6 +131,12 @@ class ROS_Node(object):
             self.path_msg.poses.append(pose)
 
 
+    def detect_wp(self):
+        wp = self.stage.map.get_waypoint(self.stage.player.get_location())
+        state = 0 
+        if wp.is_intersection:
+            state = 1
+        self.wp_state_publisher.publish(state)
     def trace_route(self):
         if self.destination:
             if (self.is_within_distance_ahead(self.destination.transform,self.stage.player.get_transform(),10)):
@@ -150,33 +163,52 @@ class ROS_Node(object):
     def publish_route(self):
         waypoints_in_costmap = []
         for wp in self.waypoints:
+        count_wp_in_front = 0
             if (self.is_within_distance_ahead(wp.transform,self.stage.player.get_transform(),50)):
+            if not count_wp_in_front:
+                if (self.is_within_distance_ahead(wp.transform,self.stage.player.get_transform(),10)):
+                    waypoints_in_costmap.append(wp)
+                    count_wp_in_front += 1
+            else:
                 waypoints_in_costmap.append(wp)
-
+                count_wp_in_front += 1
+                if(count_wp_in_front>50):
+                    break
 
         for idx in range(0,len(waypoints_in_costmap),10):
             wp = waypoints_in_costmap[idx]
             self.stage.world.debug.draw_point(wp.transform.location, color=carla.Color(0, 255, 0), life_time=0.2)
-            left_marking = self.lateral_shift(wp.transform, -wp.lane_width * 0.5)
+            if wp.is_intersection and self.action == 7:
+                color1 = carla.Color(255, 0, 0)
+                color2 = carla.Color(255, 0, 0)
+            elif self.action == -1:
+                color1 = carla.Color(255, 0, 0)
+                color2 = carla.Color(255, 0, 0)          
+            else:
+                color1 = carla.Color(0, 255, 0)
+                color2 = carla.Color(0, 0, 255)
+            self.stage.world.debug.draw_point(wp.transform.location, color=color1, life_time=0.2)
             self.stage.world.debug.draw_point(left_marking, color=carla.Color(255, 0, 0), life_time=0.2)
-            right_marking = self.lateral_shift(wp.transform, wp.lane_width * 0.5)
+            self.stage.world.debug.draw_point(left_marking, color=color2, life_time=0.2)
             self.stage.world.debug.draw_point(right_marking, color=carla.Color(255, 0, 0), life_time=0.2) 
-
+            self.stage.world.debug.draw_point(right_marking, color=color2, life_time=0.2) 
         left_lanemarking_msg = Path()
         right_lanemarking_msg = Path()
         for wp in waypoints_in_costmap:
             left_marking = self.lateral_shift(wp.transform, -wp.lane_width * 0.5)
             left_marking_pose = PoseStamped()
             left_marking_pose.pose.position.x = left_marking.x
+            left_marking_pose.header.seq = wp.is_intersection
             left_marking_pose.pose.position.y = left_marking.y
-            left_marking_pose.pose.position.z = left_marking.z
+            left_marking_pose.pose.position.y = -left_marking.y
             left_lanemarking_msg.poses.append(left_marking_pose)
             
             right_marking = self.lateral_shift(wp.transform, wp.lane_width * 0.5)
             right_marking_pose = PoseStamped()
             right_marking_pose.pose.position.x = right_marking.x
+            right_marking_pose.header.seq = wp.is_intersection
             right_marking_pose.pose.position.y = right_marking.y
-            right_marking_pose.pose.position.z = right_marking.z
+            right_marking_pose.pose.position.y = -right_marking.y
             right_lanemarking_msg.poses.append(right_marking_pose)
 
 
@@ -222,17 +254,18 @@ class ROS_Node(object):
 
 
         if distance < 0.1:
-            return True
-        
+        if distance < 10:
+            return False
         elif distance > max_distance: # if the light is close to the car
             return False
 
         else:
             yaw3 = np.arctan2(loc1.y-loc2.y,loc1.x-loc2.x)
             d_angle1 = abs((yaw3-yaw2+180)%360-180) < 20.0 # if the light is in front of the car
-            d_angle2 = abs((yaw1-yaw2+180)%360-180-90) < 20.0 # if the light is facing to the car
+            d_angle1 = abs((yaw3-yaw2+180)%360-180) < 45.0 # if the light is in front of the car
             return  d_angle1 and d_angle2
-
+            # return  d_angle1 and d_angle2
+            return d_angle2
 
     def detect_light(self):
         tf_ego = self.stage.player.get_transform()
@@ -241,6 +274,8 @@ class ROS_Node(object):
             if self.is_target_light(light.get_transform(),tf_ego,60):
                 heading_traffic_light = light
                 break
+                # print(light.get_transform())
+                # print(light.state)
         
         state = 0
         if not heading_traffic_light:
@@ -274,24 +309,34 @@ class ROS_Node(object):
         else:
             # return True
             yaw3 = np.arctan2(loc1.y-loc2.y,loc1.x-loc2.x)
+            wp_stop_sign  = self.stage.map.get_waypoint(loc1)
+            wp_ego_car    = self.stage.map.get_waypoint(loc2)
+            print(wp_stop_sign.road_id,wp_ego_car.road_id)
+            print(wp_stop_sign.lane_id,wp_ego_car.lane_id)
             d_angle1 = abs((yaw3-yaw2+180)%360-180) < 20.0 # if the light is in front of the car
-            d_angle2 = abs((yaw1-yaw2+180)%360-180-180) < 20.0 # if the light is facing to the car
-            return  d_angle1 and d_angle2
-
+            d_angle1 = abs((yaw3-yaw2+180)%360-180) < 90.0 # if the light is in front of the car
+            # d_angle2 = abs((yaw1-yaw2+180)%360-180-180) < 20.0 # if the light is facing to the car
+            return  d_angle1 #and d_angle2
         
     def detect_stop(self):
         tf_ego = self.stage.player.get_transform()
-        heading_stop_sign = None
-        for stop in self.stop_list:
-            if self.is_target_stop(stop.get_transform(),tf_ego,60):
-                heading_stop_sign = stop
-                # print(stop.get_transform())
-
+        # tf_ego = self.stage.player.get_transform()
+        # heading_stop_sign = None
+        # for stop in self.stop_list:
+        #     if self.is_target_stop(stop.get_transform(),tf_ego,60):
+        #         heading_stop_sign = stop
+        #         # print(stop.get_transform())
 
         state = 0
-        if not heading_stop_sign:
-            state = 0
-        else:
-            state = 1
-
+        # state = 0
+        # if not heading_stop_sign:
+        #     state = 0
+        # else:
+        #     state = 1
         self.heading_stop_sign_publisher.publish(state)
+        # self.heading_stop_sign_publisher.publish(state)
+        self.heading_stop_sign_publisher.publish(0)
+    def publish_clock(self):
+        time = self.stage.hud.simulation_time
+        time_msg = rospy.Time.from_sec(time)
+        self.clock_publisher.publish(time_msg)
