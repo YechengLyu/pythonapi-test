@@ -5,6 +5,7 @@ from nav_msgs.msg import Path, Odometry
 from sensor_msgs.msg import PointCloud2, PointField
 from dbw_mkz_msgs.msg import ThrottleCmd,BrakeCmd,SteeringCmd
 from std_msgs.msg import Int8, Time
+from rosgraph_msgs.msg import Clock
 from tf.transformations import quaternion_from_euler
 
 import carla
@@ -48,7 +49,7 @@ class ROS_Node(object):
         self.heading_traffic_light_publisher = rospy.Publisher('{}/heading_traffic_light'.format(self.ns), Int8, queue_size = 10)
         self.heading_stop_sign_publisher = rospy.Publisher('{}/heading_stop_sign'.format(self.ns), Int8, queue_size = 10)
         self.wp_state_publisher = rospy.Publisher('{}/wp_state'.format(self.ns), Int8, queue_size = 10)
-        self.clock_publisher = rospy.Publisher('/clock'.format(self.ns), Time, queue_size = 10)
+        self.clock_publisher = rospy.Publisher('/clock'.format(self.ns), Clock, queue_size = 10)
         
 
         return None
@@ -258,9 +259,10 @@ class ROS_Node(object):
 
         else:
             yaw3 = np.degrees(np.arctan2(loc1.y-loc2.y,loc1.x-loc2.x))
-            d_angle1 = abs(abs((yaw3-yaw2+180)%360-180)-0)  < 20.0 # if the light is in front of the car
+            d_angle1 = abs(abs((yaw3-yaw2+180)%360-180)-0)  < 30.0 # if the light is in front of the car
             d_angle2 = abs(abs((yaw1-yaw2+180)%360-180)-90) < 20.0 # if the light is facing to the car
             # print(d_angle1 , d_angle2)
+            # return True
             return  d_angle1 and d_angle2
 
     def detect_light(self):
@@ -321,6 +323,7 @@ class ROS_Node(object):
             if self.is_target_stop(stop.get_transform(),tf_ego,30):
                 heading_stop_sign = stop
                 # print(stop.get_transform())
+                # print("Stop")
 
         state = 0
         if not heading_stop_sign:
@@ -332,4 +335,6 @@ class ROS_Node(object):
     def publish_clock(self):
         time = self.stage.hud.simulation_time
         time_msg = rospy.Time.from_sec(time)
-        self.clock_publisher.publish(time_msg)
+        clock_msg = Clock()
+        clock_msg.clock = time_msg
+        self.clock_publisher.publish(clock_msg)

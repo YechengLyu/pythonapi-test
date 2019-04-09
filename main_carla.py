@@ -49,6 +49,10 @@ class Stage(object):
 		self.gnss_sensor = None
 		self.camera_manager = None			# default camera on the screen #
 		self._actor_filter = actor_filter 	# select the Lincoln MKZ #
+		self.settings = self.world.get_settings()
+		self.settings.synchronous_mode = True
+		self.world.apply_settings(self.settings)
+		self.world.tick()
 		self.restart()						# initialize the world and the vehicle #
 		self.world.on_tick(hud.on_world_tick)	# update the display content #
 		self.recording_enabled = False
@@ -67,8 +71,8 @@ class Stage(object):
 		
 		## Spawn the player. ##
 		while self.player is None:
-			# spawn_point = carla.Transform(carla.Location(x=200.2789, y=63.1175, z=1.8431), carla.Rotation(pitch=0, yaw=-10.4166, roll=0))
-			spawn_point = carla.Transform(carla.Location(x=-43.2789, y=182, z=1.8431), carla.Rotation(pitch=0, yaw=130.4166, roll=0))
+			spawn_point = carla.Transform(carla.Location(x=200.2789, y=63.1175, z=1.8431), carla.Rotation(pitch=0, yaw=-10.4166, roll=0))
+			# spawn_point = carla.Transform(carla.Location(x=-43.2789, y=182, z=1.8431), carla.Rotation(pitch=0, yaw=130.4166, roll=0))
 			# spawn_point = carla.Transform(carla.Location(x=9.11011, y=-104.884, z=1.8431), carla.Rotation(pitch=0,yaw=-88.572, roll=0))
 			# spawn_point = carla.Transform(carla.Location(x=170, y=90, z=1.8431), carla.Rotation(pitch=0,yaw=-88.572, roll=0))
 			# spawn_point = random.choice(self.map.get_spawn_points())
@@ -137,7 +141,7 @@ class HUD(object):
 		self._server_clock.tick()
 		self.server_fps = self._server_clock.get_fps()
 		self.frame_number = timestamp.frame_count
-		self.simulation_time = timestamp.elapsed_seconds
+		self.simulation_time = timestamp.frame_count/20.0	
 
 	def tick(self, world, clock):
 		self._notifications.tick(world, clock)
@@ -161,7 +165,7 @@ class HUD(object):
 			'',
 			'Vehicle: % 20s' % get_actor_display_name(world.player, truncate=20),
 			'Map:     % 20s' % world.map.name,
-			'Simulation time: % 12s' % datetime.timedelta(seconds=int(self.simulation_time)),
+			'Simulation time: % 12s' % datetime.timedelta(seconds=(self.simulation_time)),
 			'',
 			'Speed:   % 15.0f km/h' % (3.6 * math.sqrt(v.x**2 + v.y**2 + v.z**2)),
 			u'Heading:% 16.0f\N{DEGREE SIGN} % 2s' % (t.rotation.yaw, heading),
@@ -523,9 +527,12 @@ def main_loop(args):
 
 		clock = pygame.time.Clock()
 		while not rospy.is_shutdown():
-			stage.ros_node.run_step()
+			
 			clock.tick_busy_loop(20)
 			stage.tick(clock)
+			stage.world.tick()
+			stage.world.wait_for_tick()
+			stage.ros_node.run_step()
 			stage.render(display)
 			pygame.display.flip()
 
