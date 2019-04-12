@@ -75,7 +75,8 @@ class ROS_Node(object):
         self.publish_ego_car()
         control_cmd = carla.VehicleControl(throttle=self.throttle,brake=self.brake,steer=self.steering)
         self.publish_clock()
-        self.stage.player.apply_control(control_cmd)
+        if not self.stage.flag_maunual_control:
+            self.stage.player.apply_control(control_cmd)
         return None
 
 

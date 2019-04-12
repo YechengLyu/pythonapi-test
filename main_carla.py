@@ -10,7 +10,8 @@ from agents.navigation.agent import Agent
 from agents.navigation.global_route_planner_dao import GlobalRoutePlannerDAO
 from agents.navigation.global_route_planner import GlobalRoutePlanner
 from ROS_Node import ROS_Node
-from pygame.locals import K_SPACE
+from pygame.locals import K_SPACE, K_LCTRL, K_UP, K_DOWN, K_LEFT, K_RIGHT
+from pygame.locals import K_a, K_w, K_s, K_d, K_q
 
 import argparse
 import collections
@@ -59,6 +60,7 @@ class Stage(object):
 		self.recording_enabled = False
 		self.recording_start = 0
 		self.route_planner = None
+		self.flag_maunual_control = False
 
 	def restart(self):
 		## Select the default camera for display ##
@@ -116,6 +118,26 @@ class Stage(object):
 			if actor is not None:
 				actor.destroy()
 
+	def maunual_control(self):
+		keys = pygame.key.get_pressed()
+		control = self.player.get_control()
+		control.throttle = 1.0 if keys[K_UP] or keys[K_w] else 0.0
+		steer_increment = 0.05
+		steer_cache = control.steer
+		if keys[K_LEFT] or keys[K_a]:
+			steer_cache -= steer_increment
+		elif keys[K_RIGHT] or keys[K_d]:
+			steer_cache += steer_increment
+		else:
+			steer_cache = 0.0
+		steer_cache = min(0.7, max(-0.7, steer_cache))
+		control.steer = steer_cache
+		control.brake = 1.0 if keys[K_DOWN] or keys[K_s] else 0.0
+		if keys[K_q]:
+			control.reverse = 1
+		else:
+			control.reverse = 0
+		self.player.apply_control(control)
 
 # ==============================================================================
 # -- HUD -----------------------------------------------------------------------
@@ -529,12 +551,28 @@ def main_loop(args):
 		stage = Stage(client.get_world(), hud, args.filter)
 
 		clock = pygame.time.Clock()
-		flag_pause = 0
+		flag_pause = False
 		while not rospy.is_shutdown():
 			for event in pygame.event.get():
 				if event.type == pygame.KEYUP:
 					if event.key == K_SPACE:
 						flag_pause = not flag_pause
+						if(flag_pause):
+							print("Pause simulation")
+						else:
+							print("Continue simulation")
+					if event.key == K_LCTRL:
+						stage.flag_maunual_control = not stage.flag_maunual_control
+						if(stage.flag_maunual_control):
+							print("Switch to manual control")
+						else:
+							print("Switch to ROS control")					
+
+
+			if(stage.flag_maunual_control):
+				stage.maunual_control()
+
+
 			if(flag_pause): continue
 			clock.tick_busy_loop(20)
 			stage.tick(clock)
