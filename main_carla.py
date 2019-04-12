@@ -71,11 +71,13 @@ class Stage(object):
 		
 		## Spawn the player. ##
 		while self.player is None:
-			spawn_point = carla.Transform(carla.Location(x=200.2789, y=63.1175, z=1.8431), carla.Rotation(pitch=0, yaw=-10.4166, roll=0))
-			# spawn_point = carla.Transform(carla.Location(x=-43.2789, y=182, z=1.8431), carla.Rotation(pitch=0, yaw=130.4166, roll=0))
+			# spawn_point = carla.Transform(carla.Location(x=200.2789, y=63.1175, z=1.8431), carla.Rotation(pitch=0, yaw=-10.4166, roll=0))
+			# spawn_point = carla.Transform(carla.Location(x=-43.2789, y=182, z=1.8431), carla.Rotation(pitch=0, yaw=140.4166, roll=0))
 			# spawn_point = carla.Transform(carla.Location(x=9.11011, y=-104.884, z=1.8431), carla.Rotation(pitch=0,yaw=-88.572, roll=0))
 			# spawn_point = carla.Transform(carla.Location(x=170, y=90, z=1.8431), carla.Rotation(pitch=0,yaw=-88.572, roll=0))
-			# spawn_point = random.choice(self.map.get_spawn_points())
+			# spawn_point = carla.Transform(carla.Location(x=-56.3, y=-2.2, z=1.8431), carla.Rotation(pitch=0,yaw=180, roll=0))
+
+			spawn_point = random.choice(self.map.get_spawn_points())
 			self.player = self.world.try_spawn_actor(blueprint, spawn_point)
 		print("spawn_point: ",spawn_point)
 

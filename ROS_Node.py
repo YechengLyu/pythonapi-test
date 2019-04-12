@@ -6,6 +6,7 @@ from sensor_msgs.msg import PointCloud2, PointField
 from dbw_mkz_msgs.msg import ThrottleCmd,BrakeCmd,SteeringCmd
 from std_msgs.msg import Int8, Time
 from rosgraph_msgs.msg import Clock
+from mkz_planner.msg import DynamicObject,DynamicObjectArray
 from tf.transformations import quaternion_from_euler
 
 import carla
@@ -32,23 +33,25 @@ class ROS_Node(object):
         self.car_list	= self.actor_list.filter("*vehicle*")
         self.ped_list	= self.actor_list.filter("*walker*")
         self.action     = -1 
+        self.parse_speed_limit()
 
         rospy.init_node('{}_ros_node'.format(self.ns), anonymous = True)
         rospy.Subscriber('{}/ThrottleCmd'.format(self.ns), ThrottleCmd, self.callback_throttle)
         rospy.Subscriber('{}/BrakeCmd'.format(self.ns), BrakeCmd, self.callback_brake)
         rospy.Subscriber('{}/SteeringCmd'.format(self.ns), SteeringCmd, self.callback_steering)
         rospy.Subscriber('{}/action'.format(self.ns), Int8, self.callback_action)
-        # self.callback_throttle(ThrottleCmd())
         self.path_publisher = rospy.Publisher('{}/global_path'.format(self.ns), Path, queue_size = 10)
         self.odom_publisher = rospy.Publisher('{}/odom'.format(self.ns), Odometry, queue_size = 10)
+        self.current_path_publisher = rospy.Publisher('{}/current_path'.format(self.ns), Path, queue_size = 10)
         self.speed_publisher = rospy.Publisher('{}/speed'.format(self.ns), TwistStamped, queue_size = 10)
         self.LiDAR_publisher = rospy.Publisher('{}/LiDAR'.format(self.ns), PointCloud2, queue_size = 10)
         self.left_lanemarking_publisher = rospy.Publisher('{}/left_lanemarking'.format(self.ns), Path, queue_size = 10)
         self.right_lanemarking_publisher = rospy.Publisher('{}/right_lanemarking'.format(self.ns), Path, queue_size = 10)
         self.heading_traffic_light_publisher = rospy.Publisher('{}/heading_traffic_light'.format(self.ns), Int8, queue_size = 10)
-        self.heading_traffic_light_publisher = rospy.Publisher('{}/heading_traffic_light'.format(self.ns), Int8, queue_size = 10)
         self.heading_stop_sign_publisher = rospy.Publisher('{}/heading_stop_sign'.format(self.ns), Int8, queue_size = 10)
         self.wp_state_publisher = rospy.Publisher('{}/wp_state'.format(self.ns), Int8, queue_size = 10)
+        self.car_list_publisher= rospy.Publisher('{}/car_list'.format(self.ns), DynamicObjectArray, queue_size = 10)
+        self.ego_car_publisher= rospy.Publisher('{}/ego_car'.format(self.ns), DynamicObject, queue_size = 10)
         self.clock_publisher = rospy.Publisher('/clock'.format(self.ns), Clock, queue_size = 10)
         
 
@@ -56,17 +59,20 @@ class ROS_Node(object):
 
 
     def run_step(self):
-        # print("__________")
+        print("_____ttttttt_____")
         # print(self.stage.player.get_transform())
         # print(self.stop_list[0].get_location())
+        # print(self.stage.map.get_waypoint(self.speed_limit_list[0].get_location()).road_id)
         self.trace_route()
         self.detect_light()
         self.detect_stop()
+        self.detect_vehicle()
         self.publish_route()
         self.detect_wp()
         self.publish_speed()
         self.publish_odom()
         self.publish_path()
+        self.publish_ego_car()
         control_cmd = carla.VehicleControl(throttle=self.throttle,brake=self.brake,steer=self.steering)
         self.publish_clock()
         self.stage.player.apply_control(control_cmd)
@@ -193,7 +199,22 @@ class ROS_Node(object):
             self.stage.world.debug.draw_point(right_marking, color=color2, life_time=0.2) 
         left_lanemarking_msg = Path()
         right_lanemarking_msg = Path()
+        current_path_msg = Path()
         for wp in waypoints_in_costmap:
+            pose = PoseStamped()
+            pose.header.seq = wp.is_intersection
+            loc = wp.transform.location
+            ori = wp.transform.rotation
+            pose.pose.position.x = loc.x
+            pose.pose.position.y = -loc.y
+            pose.pose.position.z = loc.z
+            quat = quaternion_from_euler(ori.roll/180*np.pi,ori.pitch/180*np.pi,-ori.yaw/180*np.pi)
+            pose.pose.orientation.x = quat[0]
+            pose.pose.orientation.y = quat[1]
+            pose.pose.orientation.z = quat[2]
+            pose.pose.orientation.w = quat[3]    
+            current_path_msg.poses.append(pose)       
+
             left_marking = self.lateral_shift(wp.transform, -wp.lane_width * 0.5)
             left_marking_pose = PoseStamped()
             left_marking_pose.pose.position.x = left_marking.x
@@ -213,6 +234,7 @@ class ROS_Node(object):
 
         self.left_lanemarking_publisher.publish(left_lanemarking_msg)
         self.right_lanemarking_publisher.publish(right_lanemarking_msg)
+        self.current_path_publisher.publish(current_path_msg)
         return None
 
 
@@ -252,15 +274,15 @@ class ROS_Node(object):
         distance = np.linalg.norm(np.array([loc1.x-loc2.x,loc1.y-loc2.y,loc1.z-loc2.z]))
 
 
-        if distance < 10:
+        if distance < 1:
             return False
         elif distance > max_distance: # if the light is close to the car
             return False
 
         else:
             yaw3 = np.degrees(np.arctan2(loc1.y-loc2.y,loc1.x-loc2.x))
-            d_angle1 = abs(abs((yaw3-yaw2+180)%360-180)-0)  < 30.0 # if the light is in front of the car
-            d_angle2 = abs(abs((yaw1-yaw2+180)%360-180)-90) < 20.0 # if the light is facing to the car
+            d_angle1 = abs((yaw3-yaw2+180)%360-180-0)  < 30.0 # if the light is in front of the car
+            d_angle2 = abs((yaw1-yaw2+180)%360-180-90) < 20.0 # if the light is facing to the car
             # print(d_angle1 , d_angle2)
             # return True
             return  d_angle1 and d_angle2
@@ -309,8 +331,8 @@ class ROS_Node(object):
             wp_stop_sign  = self.stage.map.get_waypoint(loc1)
             wp_ego_car    = self.stage.map.get_waypoint(loc2)
             # print(wp_stop_sign.road_id,wp_ego_car.road_id)
-            d_angle1 = abs(abs((yaw3-yaw2+180)%360-180)-0) < 20.0 # if the light is in front of the car
-            d_angle2 = abs(abs((yaw1-yaw2+180)%360-180)-180) < 20.0 # if the light is facing to the car
+            d_angle1 = abs((yaw3-yaw2+180)%360-180-0) < 40.0 # if the light is in front of the car
+            d_angle2 = abs(abs((yaw1-yaw2+180)%360-180)-180) < 40.0 # if the light is facing to the car
             # print(yaw3,yaw2)
             # print(d_angle1,d_angle2)
             # return True
@@ -338,3 +360,86 @@ class ROS_Node(object):
         clock_msg = Clock()
         clock_msg.clock = time_msg
         self.clock_publisher.publish(clock_msg)
+
+
+    def is_target_vehicle(self,tf1, tf2,max_distance):
+        loc1 = tf1.location
+        loc2 = tf2.location
+
+        yaw1 = tf1.rotation.yaw
+        yaw2 = tf2.rotation.yaw
+
+
+        distance = np.linalg.norm(np.array([loc1.x-loc2.x,loc1.y-loc2.y,loc1.z-loc2.z]))
+
+
+        if distance < 1:
+            return False
+        
+        elif distance > max_distance: # if the light is close to the car
+            return False
+
+        else:
+            return True
+
+
+    def detect_vehicle(self):
+        tf_ego = self.stage.player.get_transform()
+        target_vehicle_list = []
+        for vehicle in self.car_list:
+            if self.is_target_vehicle(vehicle.get_transform(),tf_ego,30):
+                target_vehicle_list.append(vehicle)
+                print(vehicle.id)
+                print(vehicle.bounding_box)
+                print(vehicle.get_location())
+                print(vehicle.get_transform().rotation)
+                print(vehicle.get_velocity())
+                print(vehicle.get_angular_velocity())
+                print("-----------")
+        
+        car_list_msg = DynamicObjectArray()
+        for vehicle in target_vehicle_list:
+            car_msg = DynamicObject()
+            car_msg.dimension.x = vehicle.bounding_box.extent.x
+            car_msg.dimension.y = vehicle.bounding_box.extent.y
+            car_msg.dimension.z = vehicle.bounding_box.extent.z
+            car_msg.pose.x = vehicle.get_location().x
+            car_msg.pose.y = vehicle.get_location().y
+            car_msg.pose.theta = vehicle.get_transform().rotation.yaw
+            v = vehicle.get_velocity()
+            car_msg.speed  = math.sqrt(v.x**2 + v.y**2 + v.z**2)
+            wp = self.stage.map.get_waypoint(vehicle.get_location())
+            car_msg.waypoint.road_id = wp.road_id
+            car_msg.waypoint.lane_id = wp.lane_id
+            car_msg.waypoint.s = wp.s
+
+            car_list_msg.objects.append(car_msg)
+            
+        self.car_list_publisher.publish(car_list_msg)
+
+
+    def parse_speed_limit(self):
+        speed_sign_list	= self.actor_list.filter("*speed_limit*")
+        self.speed_limit_list=[]
+        for actor in speed_sign_list:
+            type_id = str(actor.type_id)
+            words = str(actor.type_id).split('.')
+            speed_limit = int(words[-1])
+            road_id = self.stage.map.get_waypoint(actor.get_location()).road_id
+            self.speed_limit_list.append({'road_id':road_id, 'speed_limit':speed_limit})
+
+    def publish_ego_car(self):
+        car_msg = DynamicObject()
+        car_msg.dimension.x = self.stage.player.bounding_box.extent.x
+        car_msg.dimension.y = self.stage.player.bounding_box.extent.y
+        car_msg.dimension.z = self.stage.player.bounding_box.extent.z
+        car_msg.pose.x = self.stage.player.get_location().x
+        car_msg.pose.y = self.stage.player.get_location().y
+        car_msg.pose.theta = self.stage.player.get_transform().rotation.yaw
+        v = self.stage.player.get_velocity()
+        car_msg.speed  = math.sqrt(v.x**2 + v.y**2 + v.z**2)
+        wp = self.stage.map.get_waypoint(self.stage.player.get_location())
+        car_msg.waypoint.road_id = wp.road_id
+        car_msg.waypoint.lane_id = wp.lane_id
+        car_msg.waypoint.s = wp.s
+        self.ego_car_publisher.publish(car_msg)
