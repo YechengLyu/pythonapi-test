@@ -10,6 +10,7 @@ from agents.navigation.agent import Agent
 from agents.navigation.global_route_planner_dao import GlobalRoutePlannerDAO
 from agents.navigation.global_route_planner import GlobalRoutePlanner
 from ROS_Node import ROS_Node
+from pygame.locals import K_SPACE
 
 import argparse
 import collections
@@ -528,8 +529,13 @@ def main_loop(args):
 		stage = Stage(client.get_world(), hud, args.filter)
 
 		clock = pygame.time.Clock()
+		flag_pause = 0
 		while not rospy.is_shutdown():
-			
+			for event in pygame.event.get():
+				if event.type == pygame.KEYUP:
+					if event.key == K_SPACE:
+						flag_pause = not flag_pause
+			if(flag_pause): continue
 			clock.tick_busy_loop(20)
 			stage.tick(clock)
 			stage.world.tick()
