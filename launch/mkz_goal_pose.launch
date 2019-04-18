@@ -2,11 +2,19 @@
 	<param name="/use_sim_time" value="true" />
 
 
-	<!-- <node pkg="mkz_planner" type="test_costmap" name="test_costmap" ns = "mkz_planner" output="screen">
-		<remap from="/output_costmap" to="/carla/costmap"/>
-	</node> -->
+	<node pkg="mkz_costmap" type="st_costmap" name="st_costmap" ns = "mkz_planner" output="screen">
+		<remap from="/input_ego_car" to="/carla/ego_car"/>
+		<remap from="/input_car_list" to="/carla/car_list"/>
+		<remap from="/input_path" to="/carla/current_path"/>
+		<remap from="/input_traffic_light" to="/carla/heading_traffic_light"/>
+		<remap from="/input_stop_sign" to="/carla/heading_stop_sign"/>
 
-	<node pkg="mkz_planner" type="mkz_behavior_planner" name="mkz_behavior_planner" ns = "mkz_planner" output="screen">
+		<remap from="/output_costmap" to="/carla/st_costmap"/>
+
+
+	</node>
+
+	<!-- <node pkg="mkz_planner" type="mkz_behavior_planner" name="mkz_behavior_planner" ns = "mkz_planner" output="screen">
 		<remap from="/input_waypoint" to="/carla/wp_state"/>
 		<remap from="/input_traffic_light" to="/carla/heading_traffic_light"/>
 		<remap from="/input_stop_sign" to="/carla/heading_stop_sign"/>
@@ -36,14 +44,15 @@
 		<param name="publisher_loop_rate" type="double" value="20.0"/>
 		<param name="debug" type="double" value="0.0"/>
 
-	</node>
+	</node>-->
 
 
 	<node pkg="grid_map_visualization" type="grid_map_visualization" name="grid_map_visualization" output="screen">
 		<rosparam command="load" file="./launch/demo.yaml" />
 	</node>
 
-
+	<node pkg="rviz" type="rviz" name="rviz" args="-d ./carla.rviz" />
+<!--
 	<node pkg="mkz_planner" type="mkz_local_planner" name="mkz_local_planner" ns = "mkz_planner" output="screen">
 		<remap from="/input_odom_utm" to="/carla/odom"/>
 		<remap from="/input_route" to="/carla/global_path"/>
@@ -97,7 +106,7 @@
 		<param name="debug" type="double" value="0.0"/>
 		<param name="carla" type="double" value="1.0"/>
 
-	</node>
+	</node> -->
 
 
 </launch>

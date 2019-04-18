@@ -202,6 +202,7 @@ class ROS_Node(object):
         right_lanemarking_msg = Path()
         current_path_msg = Path()
         for wp in waypoints_in_costmap:
+            # print(wp.transform.location)
             pose = PoseStamped()
             pose.header.seq = wp.is_intersection
             loc = wp.transform.location
@@ -218,17 +219,15 @@ class ROS_Node(object):
 
             left_marking = self.lateral_shift(wp.transform, -wp.lane_width * 0.5)
             left_marking_pose = PoseStamped()
-            left_marking_pose.pose.position.x = left_marking.x
             left_marking_pose.header.seq = wp.is_intersection
-            left_marking_pose.pose.position.y = left_marking.y
+            left_marking_pose.pose.position.x = left_marking.x
             left_marking_pose.pose.position.y = -left_marking.y
             left_lanemarking_msg.poses.append(left_marking_pose)
             
             right_marking = self.lateral_shift(wp.transform, wp.lane_width * 0.5)
             right_marking_pose = PoseStamped()
-            right_marking_pose.pose.position.x = right_marking.x
             right_marking_pose.header.seq = wp.is_intersection
-            right_marking_pose.pose.position.y = right_marking.y
+            right_marking_pose.pose.position.x = right_marking.x
             right_marking_pose.pose.position.y = -right_marking.y
             right_lanemarking_msg.poses.append(right_marking_pose)
 
@@ -390,13 +389,6 @@ class ROS_Node(object):
         for vehicle in self.car_list:
             if self.is_target_vehicle(vehicle.get_transform(),tf_ego,30):
                 target_vehicle_list.append(vehicle)
-                print(vehicle.id)
-                print(vehicle.bounding_box)
-                print(vehicle.get_location())
-                print(vehicle.get_transform().rotation)
-                print(vehicle.get_velocity())
-                print(vehicle.get_angular_velocity())
-                print("-----------")
         
         car_list_msg = DynamicObjectArray()
         for vehicle in target_vehicle_list:
@@ -405,8 +397,8 @@ class ROS_Node(object):
             car_msg.dimension.y = vehicle.bounding_box.extent.y
             car_msg.dimension.z = vehicle.bounding_box.extent.z
             car_msg.pose.x = vehicle.get_location().x
-            car_msg.pose.y = vehicle.get_location().y
-            car_msg.pose.theta = vehicle.get_transform().rotation.yaw
+            car_msg.pose.y = -vehicle.get_location().y
+            car_msg.pose.theta = -vehicle.get_transform().rotation.yaw/180*np.pi
             v = vehicle.get_velocity()
             car_msg.speed  = math.sqrt(v.x**2 + v.y**2 + v.z**2)
             wp = self.stage.map.get_waypoint(vehicle.get_location())
@@ -415,6 +407,12 @@ class ROS_Node(object):
             car_msg.waypoint.s = wp.s
 
             car_list_msg.objects.append(car_msg)
+            # print("id  = ",vehicle.id)
+            # print("box = ",vehicle.bounding_box)
+            # print("loc = ",vehicle.get_location())
+            # print("yaw = ",vehicle.get_transform().rotation.yaw)
+            # print("vol = ",car_msg.speed)
+            # print("-----------")
             
         self.car_list_publisher.publish(car_list_msg)
 
@@ -435,8 +433,8 @@ class ROS_Node(object):
         car_msg.dimension.y = self.stage.player.bounding_box.extent.y
         car_msg.dimension.z = self.stage.player.bounding_box.extent.z
         car_msg.pose.x = self.stage.player.get_location().x
-        car_msg.pose.y = self.stage.player.get_location().y
-        car_msg.pose.theta = self.stage.player.get_transform().rotation.yaw
+        car_msg.pose.y = -self.stage.player.get_location().y
+        car_msg.pose.theta = -self.stage.player.get_transform().rotation.yaw/180*np.pi
         v = self.stage.player.get_velocity()
         car_msg.speed  = math.sqrt(v.x**2 + v.y**2 + v.z**2)
         wp = self.stage.map.get_waypoint(self.stage.player.get_location())
