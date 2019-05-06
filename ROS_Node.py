@@ -73,15 +73,20 @@ class ROS_Node(object):
         self.publish_odom()
         self.publish_path()
         self.publish_ego_car()
-        control_cmd = carla.VehicleControl(throttle=self.throttle,brake=self.brake,steer=self.steering)
+
+        # control_cmd = carla.VehicleControl(throttle=self.throttle,brake=self.brake,steer=self.steering)
         self.publish_clock()
         if not self.stage.flag_maunual_control:
+            control_cmd = self.stage.player.get_control()
+            control_cmd.throttle = self.throttle
+            control_cmd.brake = self.brake
+            control_cmd.steer = self.steering
             self.stage.player.apply_control(control_cmd)
         return None
 
 
     def callback_throttle(self, msg):
-        self.throttle=msg.pedal_cmd
+        self.throttle=min(msg.pedal_cmd*1.2,1.0)
         if(self.throttle>0):
             self.brake = 0
 
@@ -146,26 +151,26 @@ class ROS_Node(object):
             state = 1
         self.wp_state_publisher.publish(state)
     def trace_route(self):
-        if self.destination:
-            if (self.is_within_distance_ahead(self.destination.transform,self.stage.player.get_transform(),10)):
-                self.route = None
-                self.waypoints = None
-                self.destination  = None
-        else:
-            self.route = None
-            self.waypoints = None
-            self.destination = None
+        # if self.destination:
+        #     if (self.is_within_distance_ahead(self.destination.transform,self.stage.player.get_transform(),10)):
+        #         self.route = None
+        #         self.waypoints = None
+        #         self.destination  = None
+        # else:
+        #     self.route = None
+        #     self.waypoints = None
+        #     self.destination = None
 
-        if not self.route:
-            start_waypoint = self.stage.map.get_waypoint(self.stage.player.get_location())
-            waypoints = self.stage.map.get_topology()
-            end_waypoint   = random.choice(waypoints)[0]
-            self.route = self.route_planner.trace_route(start_waypoint.transform.location,end_waypoint.transform.location)
-            self.waypoints = [] 
-            for wp in self.route:
-                self.waypoints.append(wp[0])
-            self.destination = self.waypoints[-1]
-            self.make_path()
+        # if not self.route:
+        start_waypoint = self.stage.map.get_waypoint(self.stage.player.get_location())
+        waypoints = self.stage.map.get_topology()
+        end_waypoint   = self.stage.map.get_waypoint(carla.Location(x=-355, y=-889.37, z=247))
+        self.route = self.route_planner.trace_route(start_waypoint.transform.location,end_waypoint.transform.location)
+        self.waypoints = [] 
+        for wp in self.route:
+            self.waypoints.append(wp[0])
+        self.destination = self.waypoints[-1]
+        self.make_path()
 
         
     def publish_route(self):
