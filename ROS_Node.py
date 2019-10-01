@@ -14,6 +14,7 @@ import numpy as np
 import time
 import math
 import random
+import itertools
 
 class ROS_Node(object):
     def __init__(self, stage=" ", ns = "carla"):
@@ -73,6 +74,7 @@ class ROS_Node(object):
         self.publish_odom()
         self.publish_path()
         self.publish_ego_car()
+        self.publish_LiDAR()
 
         # control_cmd = carla.VehicleControl(throttle=self.throttle,brake=self.brake,steer=self.steering)
         self.publish_clock()
@@ -392,9 +394,9 @@ class ROS_Node(object):
         tf_ego = self.stage.player.get_transform()
         target_vehicle_list = []
         for vehicle in self.car_list:
-            if self.is_target_vehicle(vehicle.get_transform(),tf_ego,30):
+            if self.is_target_vehicle(vehicle.get_transform(),tf_ego,80):
                 target_vehicle_list.append(vehicle)
-        
+        print(target_vehicle_list)
         car_list_msg = DynamicObjectArray()
         for vehicle in target_vehicle_list:
             car_msg = DynamicObject()
@@ -447,3 +449,21 @@ class ROS_Node(object):
         car_msg.waypoint.lane_id = wp.lane_id
         car_msg.waypoint.s = wp.s
         self.ego_car_publisher.publish(car_msg)
+
+    def publish_LiDAR(self):
+        points = self.stage.LiDAR_sensor.points
+        msg = PointCloud2()
+        msg.height = 1
+        msg.width = len(points)
+        msg.fields = [PointField('x', 0, PointField.FLOAT32, 1),
+            PointField('y', 4, PointField.FLOAT32, 1),
+            PointField('z', 8, PointField.FLOAT32, 1)]
+        msg.is_bigendian = False
+        msg.point_step = 12
+        msg.row_step = msg.point_step * len(points)
+        pc = np.zeros([len(points),3]).astype(np.float32)
+        for row, pt in itertools.izip(pc, points):
+            row[:] = [pt.x,-pt.y,-pt.z]
+        msg.data = pc.tostring()
+        msg.header.frame_id = 'map'
+        self.LiDAR_publisher.publish(msg)

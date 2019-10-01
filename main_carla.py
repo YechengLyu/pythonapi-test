@@ -74,14 +74,14 @@ class Stage(object):
 		
 		## Spawn the player. ##
 		while self.player is None:
-			# spawn_point = carla.Transform(carla.Location(x=-355, y=-889.37, z=247), carla.Rotation(pitch=0,yaw=-124, roll=0))
-			spawn_point = carla.Transform(carla.Location(x=289.5, y=878, z=223), carla.Rotation(pitch=0,yaw=-128, roll=0))
-			# spawn_point = random.choice(self.map.get_spawn_points())
+			### for SalisburySt
+			# spawn_point = carla.Transform(carla.Location(x=289.5, y=878, z=223), carla.Rotation(pitch=0,yaw=-128, roll=0))
+			spawn_point = random.choice(self.map.get_spawn_points())
 			self.player = self.world.try_spawn_actor(blueprint, spawn_point)
 		print("spawn_point: ",spawn_point)
 
 		## Set up the sensors. ##
-		# self.LiDAR_sensor = LiDAR_Sensor(self.player)
+		self.LiDAR_sensor = LiDAR_Sensor(self.player)
 		self.collision_sensor = CollisionSensor(self.player, self.hud)
 		self.lane_invasion_sensor = LaneInvasionSensor(self.player, self.hud)
 		self.gnss_sensor = GnssSensor(self.player)
@@ -91,9 +91,9 @@ class Stage(object):
 		actor_type = get_actor_display_name(self.player)
 		self.hud.notification(actor_type)
 		self.dao = GlobalRoutePlannerDAO(self.map)
-		self.route_planner = GlobalRoutePlanner(self.dao)
-		self.route_planner.setup()
-		self.ros_node = ROS_Node(stage=self) 
+		# self.route_planner = GlobalRoutePlanner(self.dao)
+		# self.route_planner.setup()
+		# self.ros_node = ROS_Node(stage=self) 
 
 	def tick(self, clock):
 		self.hud.tick(self, clock)
@@ -108,7 +108,7 @@ class Stage(object):
 			self.collision_sensor.sensor,
 			self.lane_invasion_sensor.sensor,
 			self.gnss_sensor.sensor,
-			# self.LiDAR_sensor.sensor,
+			self.LiDAR_sensor.sensor,
 			self.player]
 		for actor in actors:
 			if actor is not None:
@@ -410,7 +410,7 @@ class LiDAR_Sensor(object):
 		bp.set_attribute('lower_fov','-15.0')
 		bp.set_attribute('sensor_tick','0.1')
 		# bp.set_attribute('points_per_second','36000')
-		self.sensor = world.spawn_actor(bp, carla.Transform(carla.Location(x=1, z=1.7)), attach_to=self._parent)
+		self.sensor = world.spawn_actor(bp, carla.Transform(carla.Location(x=2, z=2.7), carla.Rotation(pitch=0,yaw=-90, roll=0)), attach_to=self._parent)
 		# print(self.position)
 		# We need to pass the lambda a weak reference to self to avoid circular
 		# reference.
@@ -574,7 +574,7 @@ def main_loop(args):
 			stage.tick(clock)
 			stage.world.tick()
 			stage.world.wait_for_tick()
-			stage.ros_node.run_step()
+			# stage.ros_node.run_step()
 			stage.render(display)
 			pygame.display.flip()
 

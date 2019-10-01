@@ -1,5 +1,60 @@
 <launch>
 	<param name="/use_sim_time" value="true" />
+	<node pkg="rviz" type="rviz" name="rviz" args="-d ./carla.rviz" />
+
+
+	<node pkg="mkz_sensor" type="velodyne_calib"    name="velodyne_calib" ns="mkz_sensor" output="screen">	
+		<param name="roll" type="double" value="0" />
+		<param name="pitch" type="double" value="0" />
+		<param name="yaw" type="double" value="0" />
+		<param name="frame_id" type="str" value="map" />
+		<remap from="/velodyne_points" to="/carla/LiDAR" />
+		<remap from="/velodyne_points_calib" to="/carla/LiDAR_calib" />
+	</node>
+
+	<!-- #################################################-->
+	<!-- ###############    Perception    ################-->
+	<!-- #################################################-->
+
+	<!--- LiDAR_obstacle_costmap: generate a grid_map bt thresholding on LiDAR data  -->  
+	<node pkg="mkz_costmap" type="LiDAR_obstacle_costmap"    name="LiDAR_obstacle_costmap" ns="mkz_costmap" output="screen">	
+		<remap from="/pc_input" to="/carla/LiDAR_calib" />
+		<remap from="/pc_output" to="/carla/LiDAR_obstacle_vis" />
+		<remap from="/costmap" to="/carla/LiDAR_obstacle_costmap" />
+		
+	    <param name="ROI_front" type="double" value="50" />
+		<param name="ROI_rear" type="double" value="50" />
+		<param name="ROI_left" type="double" value="50" />
+		<param name="ROI_right" type="double" value="50" />
+		<param name="ROI_height" type="double" value="-1.5" />
+		<param name="ROI_height_up" type="double" value="2" />
+		<param name="ROI_resolution" type="double" value="1" />
+		<param name="Inflation_radius" type="double" value="1.0" />
+		<param name="ROI_publish_pcl" type="double" value="0" />
+		<param name="ROI_frame_id" type="str" value="map" />
+
+	</node>
+
+
+	<node pkg="mkz_costmap" type="test_lane_costmap" name="test_lane_costmap" ns = "mkz_costmap" output="screen">
+		<remap from="/input_odom" to="/carla/odom"/>
+		<remap from="/input_left_lane" to="/carla/left_lanemarking"/>
+		<remap from="/input_right_lane" to="/carla/right_lanemarking"/>
+		<remap from="/input_action" to="/carla/action"/>
+		<remap from="/input_costmap" to="/carla/LiDAR_obstacle_costmap"/>
+		<remap from="/output_costmap" to="/carla/costmap"/>
+
+		<param name="ROI_front" type="double" value="50" />
+		<param name="ROI_rear" type="double" value="50" />
+		<param name="ROI_left" type="double" value="50" />
+		<param name="ROI_right" type="double" value="50" />
+		<param name="ROI_resolution" type="double" value="1" />
+		<param name="ROI_height" type="double" value="-1.0" />
+
+		<param name="publisher_loop_rate" type="double" value="20.0"/>
+		<param name="debug" type="double" value="1.0"/>
+
+	</node>-->
 
 
 	<!-- <node pkg="mkz_costmap" type="st_costmap" name="st_costmap" ns = "mkz_planner" output="screen">
@@ -14,6 +69,16 @@
 
 	</node> -->
 
+	<node pkg="grid_map_visualization" type="grid_map_visualization" name="grid_map_visualization" output="screen">
+		<rosparam command="load" file="./launch/demo.yaml" />
+	</node>
+
+
+	<!-- #################################################-->
+	<!-- ###############    Planner       ################-->
+	<!-- #################################################-->
+
+
 	<node pkg="mkz_planner" type="mkz_behavior_planner" name="mkz_behavior_planner" ns = "mkz_planner" output="screen">
 		<remap from="/input_waypoint" to="/carla/wp_state"/>
 		<remap from="/input_traffic_light" to="/carla/heading_traffic_light"/>
@@ -26,32 +91,6 @@
 
 	</node>
 
-
-	<node pkg="mkz_costmap" type="test_lane_costmap" name="test_lane_costmap" ns = "mkz_costmap" output="screen">
-		<remap from="/input_odom" to="/carla/odom"/>
-		<remap from="/input_left_lane" to="/carla/left_lanemarking"/>
-		<remap from="/input_right_lane" to="/carla/right_lanemarking"/>
-		<remap from="/input_action" to="/carla/action"/>
-		<remap from="/output_costmap" to="/carla/costmap"/>
-
-		<param name="ROI_front" type="double" value="50" />
-		<param name="ROI_rear" type="double" value="50" />
-		<param name="ROI_left" type="double" value="50" />
-		<param name="ROI_right" type="double" value="50" />
-		<param name="ROI_resolution" type="double" value="1" />
-		<param name="ROI_height" type="double" value="-1.0" />
-
-		<param name="publisher_loop_rate" type="double" value="20.0"/>
-		<param name="debug" type="double" value="0.0"/>
-
-	</node>-->
-
-
-	<node pkg="grid_map_visualization" type="grid_map_visualization" name="grid_map_visualization" output="screen">
-		<rosparam command="load" file="./launch/demo.yaml" />
-	</node>
-
-	<node pkg="rviz" type="rviz" name="rviz" args="-d ./carla.rviz" />
 
 	<node pkg="mkz_planner" type="mkz_local_planner" name="mkz_local_planner" ns = "mkz_planner" output="screen">
 		<remap from="/input_odom_utm" to="/carla/odom"/>
@@ -76,7 +115,7 @@
 		<remap from="/output_traj" to="/carla/traj"/>
 		<remap from="/output_predict_traj" to="/carla/predict_traj"/>
 
-		<param name="max_speed" type="double" value="30.0"/>
+		<param name="max_speed" type="double" value="15.0"/>
 		<param name="K_x" type="double" value="0.00"/>
 		<param name="K_y" type="double" value="0.04"/>
 		<param name="K_theta" type="double" value="0.3"/>
@@ -85,6 +124,9 @@
 
 	</node>
 
+	<!-- #################################################-->
+	<!-- ###############    Controller    ################-->
+	<!-- #################################################-->
 
 	<node pkg="mkz_controller" type="mkz_controller" name="mkz_controller" output="screen">
 		<remap from="/input_twist_desired" to="/carla/traj" />
@@ -107,6 +149,8 @@
 		<param name="carla" type="double" value="1.0"/>
 
 	</node>
+
+
 
 
 </launch>

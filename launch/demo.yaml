@@ -1,8 +1,8 @@
-grid_map_topic: /carla/st_costmap
+grid_map_topic: /carla/costmap
 
 grid_map_visualizations:
 
   - name: elevation_points
     type: point_cloud
     params:
-     layer: ego_lane
+     layer: fuse
